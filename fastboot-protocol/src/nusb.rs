@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fmt::Display, io::Write};
 
 use nusb::transfer::RequestBuffer;
-use nusb::DeviceInfo;
+use nusb::{DeviceInfo, MaybeFuture};
 use thiserror::Error;
 use tracing::{info, warn};
 use tracing::{instrument, trace};
@@ -11,7 +11,7 @@ use crate::protocol::{FastBootCommand, FastBootResponseParseError};
 
 /// List fastboot devices
 pub fn devices() -> std::result::Result<impl Iterator<Item = DeviceInfo>, nusb::Error> {
-    Ok(nusb::list_devices()?.filter(|d| NusbFastBoot::find_fastboot_interface(d).is_some()))
+    Ok(nusb::list_devices().wait()?.filter(|d| NusbFastBoot::find_fastboot_interface(d).is_some()))
 }
 
 /// Fastboot communication errors
@@ -72,7 +72,7 @@ impl NusbFastBoot {
             .find_map(|alt| {
                 // Requires one bulk IN and one bulk OUT
                 let (ep_out, max_out) = alt.endpoints().find_map(|end| {
-                    if end.transfer_type() == nusb::transfer::EndpointType::Bulk
+                    if end.transfer_type() == nusb::transfer::TransferType::Bulk
                         && end.direction() == nusb::transfer::Direction::Out
                     {
                         Some((end.address(), end.max_packet_size()))
@@ -81,7 +81,7 @@ impl NusbFastBoot {
                     }
                 })?;
                 let (ep_in, max_in) = alt.endpoints().find_map(|end| {
-                    if end.transfer_type() == nusb::transfer::EndpointType::Bulk
+                    if end.transfer_type() == nusb::transfer::TransferType::Bulk
                         && end.direction() == nusb::transfer::Direction::In
                     {
                         Some((end.address(), end.max_packet_size()))
@@ -114,6 +114,7 @@ impl NusbFastBoot {
     pub fn from_device(device: nusb::Device, interface: u8) -> Result<Self, NusbFastBootOpenError> {
         let interface = device
             .claim_interface(interface)
+            .wait()
             .map_err(NusbFastBootOpenError::Interface)?;
         Self::from_interface(interface)
     }
@@ -124,7 +125,7 @@ impl NusbFastBoot {
     pub fn from_info(info: &DeviceInfo) -> Result<Self, NusbFastBootOpenError> {
         let interface =
             Self::find_fastboot_interface(info).ok_or(NusbFastBootOpenError::MissingInterface)?;
-        let device = info.open().map_err(NusbFastBootOpenError::Device)?;
+        let device = info.open().wait().map_err(NusbFastBootOpenError::Device)?;
         Self::from_device(device, interface)
     }
 

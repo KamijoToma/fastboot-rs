@@ -130,7 +130,7 @@ async fn main() -> anyhow::Result<()> {
 
     println!(
         "Using Fastboot device: {}:{} M: {} P: {}",
-        info.bus_number(),
+        info.bus_id(),
         info.device_address(),
         info.manufacturer_string().unwrap_or_default(),
         info.product_string().unwrap_or_default()
